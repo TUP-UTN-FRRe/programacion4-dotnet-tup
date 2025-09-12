@@ -1,0 +1,19 @@
+@minimal_api_03_HostAddress = https://localhost:7216
+
+POST {{minimal_api_03_HostAddress}}/api/pedido
+Accept: application/json
+Content-Type: application/json
+
+{
+  "pedidoId": 6,
+  "cliente": "    ",
+  "producto": "Teclado",
+  "estado": 2147483647
+}
+
+###
+
+GET {{minimal_api_03_HostAddress}}/api/pedido/count
+
+
+###
