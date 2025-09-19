@@ -1,10 +1,10 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11010.61 d18.0
+VisualStudioVersion = 18.0.11010.61
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "minimal-api-03", "minimal-api-03.csproj", "{B5650367-21EC-CE48-4E20-9B1B1B3B38E4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "minimal-api-03", "minimal-api-03\minimal-api-03.csproj", "{B5650367-21EC-CE48-4E20-9B1B1B3B38E4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "minimap-api-03-test", "..\minimap-api-03-test\minimap-api-03-test.csproj", "{2DF34B3A-1A29-46A2-BEB0-3D301E1BECF8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "minimap-api-03-test", "minimap-api-03-test\minimap-api-03-test.csproj", "{2DF34B3A-1A29-46A2-BEB0-3D301E1BECF8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
