@@ -39,14 +39,19 @@ app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 
     logger.LogInformation("Paso 1) Ingreso al weatherforecast");
 
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
+    WeatherForecast[] forecast;
+
+    try
+    {
+        forecast = WeatherFromRemoteService();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "No se pudo obtener el clima del servicio remoto");
+        throw ex;
+    }
+
+    
 
     logger.LogInformation("Paso 2) se cargo el clima");
 
@@ -54,6 +59,28 @@ app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 
     return forecast;
 });
+
+
+
+WeatherForecast[] WeatherFromRemoteService()
+{
+
+    // Simulamos un error aleatorio
+    var random = new Random();
+    if (random.Next(1, 5) == 3)
+    {
+        throw new Exception("Error al obtener el clima del servicio remoto");
+    }
+
+    return Enumerable.Range(1, 5).Select(index =>
+        new WeatherForecast
+        (
+            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
+            Random.Shared.Next(-20, 55),
+            summaries[Random.Shared.Next(summaries.Length)]
+        ))
+        .ToArray();
+}
 
 app.Run();
 
