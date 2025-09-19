@@ -5,18 +5,23 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 //builder.Services.AddLogging(builder => builder.AddConsole());
 
-var log = new LoggerConfiguration()
-    .WriteTo.File("log-app04-.log", 
-                    rollingInterval: RollingInterval.Day)
-    .WriteTo.Console()
-    .CreateLogger();
+
+builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.File("log-app04-.log",
+                   rollingInterval: RollingInterval.Day)
+        .WriteTo.Console()); 
+
+//var log = new LoggerConfiguration()
+//    .WriteTo.File("log-app04-.log", 
+//                    rollingInterval: RollingInterval.Day)
+//    .WriteTo.Console()
+//    .CreateLogger();
 
 
 
 
-builder.Services.AddSingleton<Serilog.ILogger>(log);
-
-log.Information("Aplicacion Iniciada");
 
 var app = builder.Build();
 
@@ -29,10 +34,10 @@ var summaries = new[]
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
 
-app.MapGet("/weatherforecast", (Serilog.ILogger logger) =>
+app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 {
 
-    logger.Information("Paso 1) Ingreso al weatherforecast");
+    logger.LogInformation("Paso 1) Ingreso al weatherforecast");
 
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
@@ -43,9 +48,9 @@ app.MapGet("/weatherforecast", (Serilog.ILogger logger) =>
         ))
         .ToArray();
 
-    logger.Information("Paso 2) se cargo el clima");
+    logger.LogInformation("Paso 2) se cargo el clima");
 
-    logger.Error("No se que paso pero hubo un error");
+    logger.LogError("No se que paso pero hubo un error");
 
     return forecast;
 });

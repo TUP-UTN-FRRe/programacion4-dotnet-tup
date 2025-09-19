@@ -1,5 +1,0 @@
-2025-09-19 15:03:43.992 -03:00 [INF] Aplicacion Iniciada
-2025-09-19 15:05:33.644 -03:00 [INF] Aplicacion Iniciada
-2025-09-19 15:05:45.778 -03:00 [INF] Paso 1) Ingreso al weatherforecast
-2025-09-19 15:05:45.782 -03:00 [INF] Paso 2) se cargo el clima
-2025-09-19 15:05:45.784 -03:00 [ERR] No se que paso pero hubo un error
