@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
-        .WriteTo.File("log-app04-.log",
+        .WriteTo.File("logs/log-app04-.log",
                    rollingInterval: RollingInterval.Day)
         .WriteTo.Console()); 
 
