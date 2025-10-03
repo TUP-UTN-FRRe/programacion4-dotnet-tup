@@ -19,10 +19,15 @@ canvas.addEventListener('mousedown', (e) => {
 canvas.addEventListener('mousemove', (e) => {
     if (!isDrawing) return; // Stop the function from running when not drawing
 
+    /*
     ctx.beginPath(); // Start a new path
     ctx.moveTo(lastX, lastY); // Move to the last recorded position
     ctx.lineTo(e.offsetX, e.offsetY); // Draw a line to the current mouse position
     ctx.stroke(); // Render the line
+    */
+   connection.invoke("DrawMessage", lastX, lastY, e.offsetX,  e.offsetY).catch(function (err) {
+        return console.error(err.toString());
+    });
 
     console.log(e.offsetX, e.offsetY);
 
@@ -44,8 +49,14 @@ canvas.addEventListener('mouseout', () => {
 var connection = new signalR.HubConnectionBuilder().withUrl("https://localhost:7208/boardHub").build();
 
 
-connection.on("ReceiveDrawMessage", function (x, y) {
-    console.log("Received: " + x + ", " + y);
+connection.on("ReceiveDrawMessage", function (lastXParam, lastYParam, offsetXParam, offsetYParam) {
+    console.log("Received: " + lastXParam + ", " + lastYParam + " to " + offsetXParam + ", " + offsetYParam);
+
+    ctx.beginPath(); // Start a new path
+    ctx.moveTo(lastXParam, lastYParam); // Move to the last recorded position
+    ctx.lineTo(offsetXParam, offsetYParam); // Draw a line to the current mouse position
+    ctx.stroke(); // Render the line
+
 });
 
 connection.start().then(function () {
@@ -58,7 +69,7 @@ connection.start().then(function () {
 
 document.getElementById("btnDemo").addEventListener("click", function (event) {
     
-    connection.invoke("DrawMessage", "10", "7").catch(function (err) {
+    connection.invoke("DrawMessage", 10.123, 7.9).catch(function (err) {
         return console.error(err.toString());
     });
     event.preventDefault();
