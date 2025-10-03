@@ -36,3 +36,30 @@ canvas.addEventListener('mouseup', () => {
 canvas.addEventListener('mouseout', () => {
     isDrawing = false; // Stop drawing if the mouse leaves the canvas
 });
+
+
+
+
+
+var connection = new signalR.HubConnectionBuilder().withUrl("https://localhost:7208/boardHub").build();
+
+
+connection.on("ReceiveDrawMessage", function (x, y) {
+    console.log("Received: " + x + ", " + y);
+});
+
+connection.start().then(function () {
+    console.log("SignalR Connected.");
+
+
+}).catch(function (err) {
+    return console.error(err.toString());
+});
+
+document.getElementById("btnDemo").addEventListener("click", function (event) {
+    
+    connection.invoke("DrawMessage", "10", "7").catch(function (err) {
+        return console.error(err.toString());
+    });
+    event.preventDefault();
+});
