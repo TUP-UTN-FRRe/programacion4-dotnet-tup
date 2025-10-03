@@ -1,0 +1,1033 @@
+openapi: 3.0.3
+info:
+  title: Logistics/Transportation API
+  version: "1.0.0"
+  description: API to quote, create, and manage shipments.
+  termsOfService: 'http://frre.utn.edu.ar/terminos'
+  license:
+    name: Apache-2.0
+    url: 'https://www.apache.org/licenses/LICENSE-2.0.html'
+servers:
+  - url: https://api.logistica-utn.com
+
+paths:
+  # ===========================
+  # SHIPPING COST CALCULATION
+  # ===========================
+  /shipping/cost:
+    post:
+      summary: Calculate shipping cost
+      description: |
+        Quotes cost for a shipment without creating any resources.
+        Used by Order Management module to show shipping options to customers before purchase.
+        
+        Integration Flow:
+        1. Order Management sends only: delivery_address + product IDs with quantities
+        2. Logistics queries Stock module for EACH product:
+           - GET /products/{id} → returns weight, dimensions, warehouse_postal_code
+        3. Logistics calculates:
+           - Total weight = sum(product.weight * quantity)
+           - Total volume = sum(product dimensions * quantity)
+           - Distance = from warehouse_postal_code to delivery_address.postal_code
+        4. Returns estimated cost based on weight, volume, distance, and transport type
+        5. NO data is persisted (quote only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShippingCostRequest"
+            examples:
+              sample:
+                value:
+                  delivery_address:
+                    street: "Av. Dirac 1234"
+                    city: "Resistencia"
+                    state: "Chaco"
+                    postal_code: "H3500ABC"
+                    country: "AR"
+                  products:
+                    - id: 1
+                      quantity: 2
+                    - id: 2
+                      quantity: 1
+      responses:
+        "200":
+          description: Shipping cost calculated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShippingCostResponse"
+              examples:
+                sample:
+                  value:
+                    currency: "ARS"
+                    total_cost: 45.5
+                    transport_type: "air"
+                    products:
+                      - id: 1
+                        cost: 20.0
+                      - id: 2
+                        cost: 25.5
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "422":
+          $ref: "#/components/responses/Error422"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  # ===========================
+  # TRANSPORT METHODS
+  # ===========================
+  /shipping/transport-methods:
+    get:
+      summary: Get available transport methods
+      description: |
+        Returns the list of available transport methods that can be used for shipping.
+        Used by Order Management portal to display shipping options to customers.
+        
+        Returns basic information about each transport type (air, sea, rail, road).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of available transport methods
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransportMethodsResponse"
+              examples:
+                sample:
+                  value:
+                    transport_methods:
+                      - type: "air"
+                        name: "Air Freight"
+                        estimated_days: "1-3"
+                      - type: "road"
+                        name: "Road Transport"
+                        estimated_days: "3-7"
+                      - type: "rail"
+                        name: "Rail Freight"
+                        estimated_days: "5-10"
+                      - type: "sea"
+                        name: "Sea Freight"
+                        estimated_days: "15-30"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  # ===========================
+  # SHIPMENT CREATION
+  # ===========================
+  /shipping:
+    post:
+      summary: Create shipment
+      description: |
+        Creates a new shipment for an order with customer-selected transport method.
+        
+        Customer Checkout Flow:
+        1. Customer adds products to cart
+        2. Customer enters delivery address at checkout
+        3. Portal shows transport options:
+           - Queries GET /shipping/transport-methods
+           - Queries POST /shipping/cost for each option
+           - Displays: "Air Freight: $45.50 (1-3 days)" etc.
+        4. Customer selects preferred transport method (e.g., "air")
+        5. Customer completes payment → Order #123 created
+        6. Portal calls this endpoint with customer's selection
+        
+        Integration Flow:
+        1. Order Management sends:
+           - order_id, user_id, delivery_address, transport_type (customer choice), product IDs
+        2. Logistics queries Stock module for EACH product:
+           - GET /products/{id} → returns weight, dimensions, warehouse_postal_code
+        3. Logistics validates:
+           - All products exist in Stock
+           - Sufficient stock available
+           - Selected transport_type is valid
+        4. Logistics calculates final shipping cost using customer's transport_type
+        5. Creates shipment record with status 'created'
+        6. Returns shipping_id to Order Management
+        7. Order Management links shipping_id to Order #123
+        
+        Note: Stock module is the source of truth for:
+        - Product dimensions and weight
+        - Warehouse location (departure address)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShippingRequest"
+            examples:
+              sample:
+                value:
+                  order_id: 123
+                  user_id: 456
+                  delivery_address:
+                    street: "Av. Siempre Viva 123"
+                    city: "Resistencia"
+                    state: "Chaco"
+                    postal_code: "H3500ABC"
+                    country: "AR"
+                  transport_type: "air"
+                  products:
+                    - id: 1
+                      quantity: 1
+                    - id: 2
+                      quantity: 2
+      responses:
+        "201":
+          description: Shipment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateShippingResponse"
+              examples:
+                sample:
+                  value:
+                    shipping_id: 789
+                    status: "created"
+                    transport_type: "air"
+                    estimated_delivery_at: "2025-10-01T00:00:00Z"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "422":
+          $ref: "#/components/responses/Error422"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+    # ===========================
+    # LIST SHIPMENTS WITH FILTERS
+    # ===========================
+    get:
+      summary: List shipments with filters
+      description: |
+        Returns a paginated list of shipments with optional filters.
+        
+        Use cases:
+        - Get all shipments for a specific user (Order Management module)
+        - Filter by status for operational reports
+        - Date range queries for analytics
+        
+        All filters are optional. Without filters, returns all shipments (paginated).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: integer
+          description: Filter by user ID
+          example: 456
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/ShippingStatus"
+          description: Filter by shipment status
+          example: "in_transit"
+        - in: query
+          name: from_date
+          schema:
+            type: string
+            format: date
+          description: Filter shipments created from this date (ISO 8601)
+          example: "2025-01-01"
+        - in: query
+          name: to_date
+          schema:
+            type: string
+            format: date
+          description: Filter shipments created until this date (ISO 8601)
+          example: "2025-12-31"
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of results per page
+      responses:
+        "200":
+          description: List of shipments matching filters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShippingListResponse"
+              examples:
+                sample:
+                  value:
+                    shipments:
+                      - shipping_id: 789
+                        order_id: 123
+                        user_id: 456
+                        products:
+                          - product_id: 12
+                            quantity: 2
+                          - product_id: 22
+                            quantity: 1
+                        status: "in_distribution"
+                        transport_type: "air"
+                        estimated_delivery_at: "2025-10-01T00:00:00Z"
+                        created_at: "2025-09-01T10:00:00Z"
+                      - shipping_id: 790
+                        order_id: 124
+                        user_id: 456
+                        products:
+                          - product_id: 31
+                            quantity: 3
+                        status: "delivered"
+                        transport_type: "road"
+                        estimated_delivery_at: "2025-09-15T00:00:00Z"
+                        created_at: "2025-09-05T14:30:00Z"
+                    pagination:
+                      current_page: 1
+                      total_pages: 5
+                      total_items: 87
+                      items_per_page: 20
+        "401":
+          $ref: "#/components/responses/Error401"
+        "422":
+          $ref: "#/components/responses/Error422"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  # ===========================
+  # SHIPMENT DETAILS
+  # ===========================
+  /shipping/{shipping_id}:
+    get:
+      summary: Get shipment details
+      description: |
+        Retrieves complete details of a specific shipment including:
+        - Current status
+        - Full delivery and departure addresses
+        - Associated products
+        - Tracking information
+        - Complete status change history (logs)
+        - Cost and transport information
+        
+        Used by Order Management to show shipment details to customers.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: shipping_id
+          required: true
+          schema:
+            type: integer
+          description: Unique shipment identifier
+          example: 789
+      responses:
+        "200":
+          description: Shipment details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShippingDetail"
+              examples:
+                sample:
+                  value:
+                    shipping_id: 789
+                    order_id: 123
+                    user_id: 456
+                    delivery_address:
+                      street: "Av. Siempre Viva 123"
+                      city: "Resistencia"
+                      state: "Chaco"
+                      postal_code: "H3500ABC"
+                      country: "AR"
+                    departure_address:
+                      street: "Warehouse Central"
+                      city: "Resistencia"
+                      state: "Chaco"
+                      postal_code: "H3500XYZ"
+                      country: "AR"
+                    products:
+                      - product_id: 12
+                        quantity: 2
+                      - product_id: 22
+                        quantity: 1
+                    status: "in_distribution"
+                    transport_type: "air"
+                    tracking_number: "LOG-AR-123456789"
+                    carrier_name: "Express Logistics SA"
+                    total_cost: 45.5
+                    currency: "ARS"
+                    estimated_delivery_at: "2025-10-01T00:00:00Z"
+                    created_at: "2025-09-01T10:00:00Z"
+                    updated_at: "2025-09-15T09:29:00Z"
+                    logs:
+                      - timestamp: "2025-09-15T09:29:00Z"
+                        status: "in_distribution"
+                        message: "Shipment is in distribution"
+                      - timestamp: "2025-09-12T09:27:00Z"
+                        status: "arrived"
+                        message: "Package arrived at delivery office"
+                      - timestamp: "2025-09-10T08:15:00Z"
+                        status: "in_transit"
+                        message: "Package in transit"
+                      - timestamp: "2025-09-01T10:00:00Z"
+                        status: "created"
+                        message: "Shipment created"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  # ===========================
+  # CANCEL SHIPMENT
+  # ===========================
+  /shipping/{shipping_id}/cancel:
+    post:
+      summary: Cancel a shipment
+      description: |
+        Cancels an existing shipment that has not yet been dispatched.
+        
+        Restrictions:
+        - Can only cancel shipments with status 'created' or 'reserved'
+        - Once in 'in_transit' or later stages, cannot be cancelled
+        
+        Integration impact:
+        - Notifies Order Management module
+        - Triggers inventory stock return in Inventory module
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: shipping_id
+          required: true
+          schema:
+            type: integer
+          description: Unique shipment identifier
+          example: 789
+      responses:
+        "200":
+          description: Shipment cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelShippingResponse"
+              examples:
+                sample:
+                  value:
+                    shipping_id: 789
+                    status: "cancelled"
+                    cancelled_at: "2025-09-18T19:00:00Z"
+        "400":
+          description: Shipment cannot be cancelled in current status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                state_conflict:
+                  value:
+                    code: "bad_request"
+                    message: "Shipment cannot be cancelled. Current status 'in_transit' does not allow cancellation."
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+# ===========================
+# COMPONENTS
+# ===========================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from authentication service
+
+  schemas:
+    # ===========================
+    # ADDRESS SCHEMA
+    # ===========================
+    Address:
+      type: object
+      required: [street, city, state, postal_code, country]
+      properties:
+        street:
+          type: string
+          description: Street address including number
+          example: "Av. Dirac 1234"
+        city:
+          type: string
+          description: City name
+          example: "Resistencia"
+        state:
+          type: string
+          description: State/Province name
+          example: "Chaco"
+        postal_code:
+          type: string
+          description: Argentinian postal code format (CPA)
+          pattern: '^([A-Z]{1}\d{4}[A-Z]{3})$'
+          example: "H3500ABC"
+        country:
+          type: string
+          description: ISO-3166-1 alpha-2 country code
+          minLength: 2
+          maxLength: 2
+          example: "AR"
+
+    # ===========================
+    # PRODUCT REQUEST SCHEMA
+    # ===========================
+    ProductRequest:
+      type: object
+      required: [id, quantity]
+      description: |
+        Simplified product reference for requests.
+        Only product ID and quantity are sent by Order Management.
+        Logistics module queries Stock module for complete product details:
+        - Weight and dimensions (for cost/volume calculation)
+        - Warehouse location (departure address)
+      properties:
+        id:
+          type: integer
+          description: Product ID from Stock module
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of units of this product
+          example: 2
+
+    # ===========================
+    # PRODUCT DETAILS (FROM STOCK)
+    # ===========================
+    ProductDetails:
+      type: object
+      required: [id, weight, length, width, height]
+      description: |
+        Complete product information obtained from Stock module.
+        This schema documents what Logistics expects to receive from Stock API.
+        NOT sent in requests, but used internally for calculations.
+      properties:
+        id:
+          type: integer
+          description: Product ID
+          example: 1
+        weight:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Weight per unit in kilograms
+          example: 1.5
+        length:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Length in centimeters
+          example: 30
+        width:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Width in centimeters
+          example: 20
+        height:
+          type: number
+          format: float
+          minimum: 0.01
+          description: Height in centimeters
+          example: 10
+
+    # ===========================
+    # PRODUCT QUANTITY SCHEMA
+    # ===========================
+    ProductQty:
+      type: object
+      required: [product_id, quantity]
+      description: Simplified product reference with quantity
+      properties:
+        product_id:
+          type: integer
+          description: Product ID from Inventory module
+          example: 12
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of units
+          example: 2
+
+    # ===========================
+    # SHIPPING LOG SCHEMA
+    # ===========================
+    ShippingLog:
+      type: object
+      required: [timestamp, status, message]
+      description: Audit log entry for status changes
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: When the status change occurred (ISO 8601 UTC)
+          example: "2025-09-15T09:29:00Z"
+        status:
+          $ref: "#/components/schemas/ShippingStatus"
+        message:
+          type: string
+          description: Human-readable description of the status change
+          example: "Shipment is in distribution"
+
+    # ===========================
+    # TRANSPORT TYPE ENUM
+    # ===========================
+    TransportType:
+      type: string
+      enum: [air, sea, rail, road]
+      description: |
+        Available transport methods:
+        - air: Fastest (1-3 days) but more expensive
+        - road: Medium speed (3-7 days), most flexible
+        - rail: Medium-slow (5-10 days), good for heavy cargo
+        - sea: Slowest (15-30 days) but cheapest for large volumes
+
+    # ===========================
+    # SHIPPING STATUS ENUM
+    # ===========================
+    ShippingStatus:
+      type: string
+      enum:
+        - created
+        - reserved
+        - in_transit
+        - delivered
+        - cancelled
+        - in_distribution
+        - arrived
+      description: |
+        Shipment lifecycle states:
+        - created: Shipment record created, not yet dispatched
+        - reserved: Inventory reserved, awaiting dispatch
+        - in_transit: Package in transit to destination
+        - arrived: Package arrived at destination facility
+        - in_distribution: Out for delivery to final address
+        - delivered: Successfully delivered to customer
+        - cancelled: Shipment cancelled (only from created/reserved)
+
+    # ===========================
+    # REQUEST/RESPONSE SCHEMAS
+    # ===========================
+    
+    ShippingCostRequest:
+      type: object
+      required: [delivery_address, products]
+      description: |
+        Request body for shipping cost calculation.
+        
+        Note: departure_postal_code is NOT sent in the request.
+        Logistics queries Stock module for warehouse location based on product IDs.
+      properties:
+        delivery_address:
+          $ref: "#/components/schemas/Address"
+        products:
+          type: array
+          minItems: 1
+          description: List of products with only ID and quantity (Stock provides the rest)
+          items:
+            $ref: "#/components/schemas/ProductRequest"
+
+    ShippingCostResponse:
+      type: object
+      required: [currency, total_cost, transport_type, products]
+      description: Shipping cost calculation result
+      properties:
+        currency:
+          type: string
+          description: Currency code (ISO 4217)
+          example: "ARS"
+        total_cost:
+          type: number
+          format: float
+          description: Total shipping cost
+          example: 45.5
+        transport_type:
+          $ref: "#/components/schemas/TransportType"
+        products:
+          type: array
+          description: Individual cost breakdown per product
+          items:
+            type: object
+            required: [id, cost]
+            properties:
+              id:
+                type: integer
+                description: Product ID
+                example: 1
+              cost:
+                type: number
+                format: float
+                description: Shipping cost for this product
+                example: 20.0
+
+    TransportMethodsResponse:
+      type: object
+      required: [transport_methods]
+      description: List of available transport methods
+      properties:
+        transport_methods:
+          type: array
+          items:
+            type: object
+            required: [type, name, estimated_days]
+            properties:
+              type:
+                $ref: "#/components/schemas/TransportType"
+              name:
+                type: string
+                description: Human-readable transport method name
+                example: "Air Freight"
+              estimated_days:
+                type: string
+                description: Estimated delivery time range
+                example: "1-3"
+
+    CreateShippingRequest:
+      type: object
+      required: [order_id, user_id, delivery_address, transport_type, products]
+      description: |
+        Request body for creating a new shipment.
+        
+        Customer Purchase Flow:
+        1. Customer adds products to cart
+        2. Customer enters delivery address
+        3. Portal queries: GET /shipping/transport-methods (shows available options)
+        4. Portal queries: POST /shipping/cost for each transport method (shows prices)
+        5. Customer selects preferred transport method (air, road, rail, sea)
+        6. Customer completes purchase → Order created
+        7. Portal calls this endpoint with customer's selected transport_type
+        
+        Integration Flow:
+        1. Order Management sends: order_id, user_id, delivery_address, transport_type, product IDs
+        2. Logistics queries Stock module for each product:
+           - Weight and dimensions (for cost calculation)
+           - Warehouse location (departure_postal_code)
+        3. Logistics validates selected transport_type is available
+        4. Logistics calculates final cost using customer's selected transport method
+        5. Creates shipment with status 'created'
+        6. Returns shipping_id to Order Management
+        
+        Note: transport_type is chosen by the customer during checkout.
+      properties:
+        order_id:
+          type: integer
+          description: Order ID from Order Management module
+          example: 123
+        user_id:
+          type: integer
+          description: Customer user ID
+          example: 456
+        delivery_address:
+          $ref: "#/components/schemas/Address"
+        transport_type:
+          $ref: "#/components/schemas/TransportType"
+          description: Transport method selected by customer during checkout
+        products:
+          type: array
+          minItems: 1
+          description: List of products with only ID and quantity (Stock provides weight, dimensions, warehouse)
+          items:
+            $ref: "#/components/schemas/ProductRequest"
+
+    CreateShippingResponse:
+      type: object
+      required: [shipping_id, status, transport_type, estimated_delivery_at]
+      description: Response after successful shipment creation
+      properties:
+        shipping_id:
+          type: integer
+          description: Unique shipment identifier (returned to Order Management)
+          example: 789
+        status:
+          $ref: "#/components/schemas/ShippingStatus"
+        transport_type:
+          $ref: "#/components/schemas/TransportType"
+        estimated_delivery_at:
+          type: string
+          format: date-time
+          description: Estimated delivery date and time (ISO 8601 UTC)
+          example: "2025-10-01T00:00:00Z"
+
+    ShippingDetail:
+      type: object
+      required: [shipping_id, order_id, user_id, delivery_address, products, status, transport_type, estimated_delivery_at, created_at, updated_at, logs]
+      description: Complete shipment information including all details and history
+      properties:
+        shipping_id:
+          type: integer
+          description: Unique shipment identifier
+          example: 789
+        order_id:
+          type: integer
+          description: Associated order ID from Order Management
+          example: 123
+        user_id:
+          type: integer
+          description: Customer user ID
+          example: 456
+        delivery_address:
+          $ref: "#/components/schemas/Address"
+        departure_address:
+          $ref: "#/components/schemas/Address"
+        products:
+          type: array
+          description: List of products in this shipment
+          items:
+            $ref: "#/components/schemas/ProductQty"
+        status:
+          $ref: "#/components/schemas/ShippingStatus"
+        transport_type:
+          $ref: "#/components/schemas/TransportType"
+        tracking_number:
+          type: string
+          description: External tracking number from carrier
+          example: "LOG-AR-123456789"
+        carrier_name:
+          type: string
+          description: Name of the courier/carrier company
+          example: "Express Logistics SA"
+        total_cost:
+          type: number
+          format: float
+          description: Total shipping cost
+          example: 45.5
+        currency:
+          type: string
+          description: Currency code (ISO 4217)
+          example: "ARS"
+        estimated_delivery_at:
+          type: string
+          format: date-time
+          description: Estimated delivery date and time (ISO 8601 UTC)
+          example: "2025-10-01T00:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the shipment was created (ISO 8601 UTC)
+          example: "2025-09-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the shipment was last updated (ISO 8601 UTC)
+          example: "2025-09-15T09:29:00Z"
+        logs:
+          type: array
+          description: Complete history of status changes
+          items:
+            $ref: "#/components/schemas/ShippingLog"
+
+    ShippingListResponse:
+      type: object
+      required: [shipments, pagination]
+      description: Paginated list of shipments with metadata
+      properties:
+        shipments:
+          type: array
+          description: Array of shipment summaries
+          items:
+            type: object
+            required: [shipping_id, order_id, user_id, products, status, transport_type, estimated_delivery_at, created_at]
+            properties:
+              shipping_id:
+                type: integer
+                example: 789
+              order_id:
+                type: integer
+                example: 123
+              user_id:
+                type: integer
+                example: 456
+              products:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductQty"
+              status:
+                $ref: "#/components/schemas/ShippingStatus"
+              transport_type:
+                $ref: "#/components/schemas/TransportType"
+              estimated_delivery_at:
+                type: string
+                format: date-time
+                example: "2025-10-01T00:00:00Z"
+              created_at:
+                type: string
+                format: date-time
+                example: "2025-09-01T10:00:00Z"
+        pagination:
+          type: object
+          required: [current_page, total_pages, total_items, items_per_page]
+          description: Pagination metadata
+          properties:
+            current_page:
+              type: integer
+              description: Current page number
+              example: 1
+            total_pages:
+              type: integer
+              description: Total number of pages
+              example: 5
+            total_items:
+              type: integer
+              description: Total number of shipments matching filters
+              example: 87
+            items_per_page:
+              type: integer
+              description: Number of items per page
+              example: 20
+
+    CancelShippingResponse:
+      type: object
+      required: [shipping_id, status, cancelled_at]
+      description: Confirmation of shipment cancellation
+      properties:
+        shipping_id:
+          type: integer
+          example: 789
+        status:
+          $ref: "#/components/schemas/ShippingStatus"
+        cancelled_at:
+          type: string
+          format: date-time
+          description: When the shipment was cancelled (ISO 8601 UTC)
+          example: "2025-09-18T19:00:00Z"
+
+    # ===========================
+    # ERROR SCHEMA
+    # ===========================
+    Error:
+      type: object
+      required: [code, message]
+      description: Standard error response format used across all endpoints
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "unprocessable_entity"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Validation failed."
+        details:
+          oneOf:
+            - type: string
+            - type: object
+            - type: array
+          description: Additional error details (optional, format varies by error type)
+
+  # ===========================
+  # REUSABLE RESPONSES
+  # ===========================
+  responses:
+    Error400:
+      description: Bad Request - Malformed request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            malformed:
+              value:
+                code: "bad_request"
+                message: "Malformed request body."
+
+    Error401:
+      description: Unauthorized - Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            token:
+              value:
+                code: "unauthorized"
+                message: "Missing or invalid token."
+
+    Error404:
+      description: Not Found - Requested resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            not_found:
+              value:
+                code: "not_found"
+                message: "Resource not found."
+
+    Error409:
+      description: Conflict - State conflict or business rule violation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            conflict:
+              value:
+                code: "conflict"
+                message: "State conflict."
+
+    Error422:
+      description: Unprocessable Entity - Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            validation:
+              value:
+                code: "unprocessable_entity"
+                message: "Validation failed."
+                details:
+                  field_errors:
+                    - field: "products[0].quantity"
+                      message: "Must be >= 1"
+                    - field: "delivery_address.postal_code"
+                      message: "Must match Argentinian postal code format (e.g., H3500ABC)"
+
+    Error500:
+      description: Internal Server Error - Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            internal:
+              value:
+                code: "server_error"
+                message: "Unexpected error."
+
+# ===========================
+# GLOBAL SECURITY
+# ===========================
+security:
+  - bearerAuth: []

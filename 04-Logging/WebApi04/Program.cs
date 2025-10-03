@@ -65,12 +65,12 @@ app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 WeatherForecast[] WeatherFromRemoteService()
 {
 
-    // Simulamos un error aleatorio
-    var random = new Random();
-    if (random.Next(1, 5) == 3)
-    {
-        throw new Exception("Error al obtener el clima del servicio remoto");
-    }
+    //// Simulamos un error aleatorio
+    //var random = new Random();
+    //if (random.Next(1, 5) == 3)
+    //{
+    //    throw new Exception("Error al obtener el clima del servicio remoto");
+    //}
 
     return Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
